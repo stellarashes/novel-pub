@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  novel-pub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: novel-pub-app
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - NODE_ENV=production
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
