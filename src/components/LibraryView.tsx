@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Book, ReadingProgress, NovelStatus, AgeRating } from '../types';
+import { AVAILABLE_GENRES } from './CreateBookModal';
 import { Star, BookOpen, Clock, Tag, Globe, CheckCircle2, AlertCircle, Filter, RotateCcw } from 'lucide-react';
 
 interface LibraryViewProps {
@@ -10,7 +11,7 @@ interface LibraryViewProps {
   onOpenCreateModal: () => void;
 }
 
-const GENRES = ['All', 'Action', 'Sci-Fi', 'Xianxia', 'Fantasy', 'Romance', 'Mystery', 'Slice of Life'];
+const GENRES = ['All', ...AVAILABLE_GENRES];
 const LANGUAGES = ['All', 'English', 'Korean', 'Japanese', 'Chinese', 'Spanish', 'French'];
 const STATUSES: ('All' | NovelStatus)[] = ['All', 'Ongoing', 'Completed', 'Hiatus'];
 const AGE_RATINGS: ('All' | AgeRating)[] = ['All', 'All Ages', 'Teen', 'Mature'];
