@@ -7,6 +7,7 @@ interface LibraryViewProps {
   books: Book[];
   progressMap: Record<string, ReadingProgress>;
   searchTerm: string;
+  activeUrlTag?: string | null;
   onSelectBook: (book: Book) => void;
   onOpenCreateModal: () => void;
 }
@@ -20,6 +21,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   books,
   progressMap,
   searchTerm,
+  activeUrlTag,
   onSelectBook,
   onOpenCreateModal
 }) => {
@@ -27,7 +29,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [selectedLanguage, setSelectedLanguage] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'All' | NovelStatus>('All');
   const [selectedAgeRating, setSelectedAgeRating] = useState<'All' | AgeRating>('All');
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  
+  const selectedTag = activeUrlTag || null;
+
+  const handleToggleTag = (tag: string) => {
+    if (selectedTag === tag) {
+      window.location.hash = '#/';
+    } else {
+      window.location.hash = `#/tag/${encodeURIComponent(tag)}`;
+    }
+  };
 
   // Extract all unique tags across books
   const allTags = useMemo(() => {
@@ -64,7 +75,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     setSelectedLanguage('All');
     setSelectedStatus('All');
     setSelectedAgeRating('All');
-    setSelectedTag(null);
+    window.location.hash = '#/';
   };
 
   const hasActiveFilters = selectedGenre !== 'All' || selectedLanguage !== 'All' || selectedStatus !== 'All' || selectedAgeRating !== 'All' || selectedTag !== null;
@@ -167,7 +178,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               return (
                 <button
                   key={tag}
-                  onClick={() => setSelectedTag(isSelected ? null : tag)}
+                  onClick={() => handleToggleTag(tag)}
                   className={`text-[11px] font-medium px-2.5 py-0.5 rounded-md transition-all ${
                     isSelected
                       ? 'bg-indigo-600 text-white shadow-sm'
@@ -276,9 +287,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     {book.tags && book.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2.5">
                         {book.tags.slice(0, 3).map(t => (
-                          <span key={t} className="text-[10px] font-medium bg-slate-950 border border-slate-800 text-slate-400 px-2 py-0.5 rounded-md">
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleTag(t);
+                            }}
+                            className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-all ${
+                              selectedTag === t
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                            }`}
+                          >
                             #{t}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     )}

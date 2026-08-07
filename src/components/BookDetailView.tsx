@@ -198,9 +198,18 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
             {book.tags && book.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {book.tags.map(t => (
-                  <span key={t} className="text-xs font-medium bg-slate-950 border border-slate-800 text-slate-300 px-2.5 py-1 rounded-lg">
-                    #{t}
-                  </span>
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => {
+                      window.location.hash = `#/tag/${encodeURIComponent(t)}`;
+                    }}
+                    className="text-xs font-semibold bg-slate-950 hover:bg-indigo-600/20 border border-slate-800 hover:border-indigo-500/40 text-slate-300 hover:text-indigo-300 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                    title={`View all novels tagged #${t}`}
+                  >
+                    <Tag className="w-3 h-3 text-indigo-400" />
+                    <span>#{t}</span>
+                  </button>
                 ))}
               </div>
             )}

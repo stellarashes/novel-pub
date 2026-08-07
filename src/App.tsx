@@ -24,6 +24,7 @@ export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'library' | 'book_detail' | 'chapter_editor' | 'reader'>('library');
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
+  const [urlTag, setUrlTag] = useState<string | null>(null);
 
   // Modal States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -111,7 +112,19 @@ export const App: React.FC = () => {
         }
       }
 
+      // Route 4: Tag Filter -> #/tag/:tagName
+      const tagMatch = hash.match(/^#\/tag\/([^/]+)$/);
+      if (tagMatch) {
+        const tagName = decodeURIComponent(tagMatch[1]);
+        setUrlTag(tagName);
+        setActiveView('library');
+        setSelectedBook(null);
+        setSelectedChapterId(null);
+        return;
+      }
+
       // Default Route: Library Shelf -> #/
+      setUrlTag(null);
       setActiveView('library');
       setSelectedBook(null);
       setSelectedChapterId(null);
@@ -124,7 +137,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [isAuthenticated, books]);
 
-  // Navigation Trigger Functions
+  // Navigation Helper Handlers
   const navigateToLibrary = () => {
     window.location.hash = '#/';
   };
@@ -135,14 +148,15 @@ export const App: React.FC = () => {
   };
 
   const navigateToReader = (chapterId: string) => {
-    if (!selectedBook) return;
-    setSelectedChapterId(chapterId);
-    window.location.hash = `#/book/${selectedBook.id}/chapter/${chapterId}`;
+    if (selectedBook) {
+      window.location.hash = `#/book/${selectedBook.id}/chapter/${chapterId}`;
+    }
   };
 
   const navigateToChapterEditor = () => {
-    if (!selectedBook) return;
-    window.location.hash = `#/book/${selectedBook.id}/edit`;
+    if (selectedBook) {
+      window.location.hash = `#/book/${selectedBook.id}/edit`;
+    }
   };
 
   if (!isAuthenticated) {
@@ -170,6 +184,7 @@ export const App: React.FC = () => {
             books={books}
             progressMap={progressMap}
             searchTerm={searchTerm}
+            activeUrlTag={urlTag}
             onSelectBook={navigateToBook}
             onOpenCreateModal={() => setIsCreateModalOpen(true)}
           />
