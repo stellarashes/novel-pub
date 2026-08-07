@@ -94,8 +94,8 @@ export async function parseEpubFile(file: File): Promise<ParsedEpubResult> {
     const chapterHtml = await chapterFile.async('text');
     const chapterDoc = domParser.parseFromString(chapterHtml, 'text/html');
 
-    // Extract Title from h1, h2, or title tag
-    const chapterTitleEl = chapterDoc.querySelector('h1, h2, h3, title');
+    // Extract Title from body headings first (ignoring head title tag)
+    const chapterTitleEl = chapterDoc.querySelector('body h1, body h2, body h3, body h4') || chapterDoc.querySelector('h1, h2, h3, h4');
     const rawTitle = chapterTitleEl?.textContent?.trim() || `Chapter ${chapters.length + 1}`;
 
     // Extract Body Content
