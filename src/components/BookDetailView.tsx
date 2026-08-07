@@ -163,9 +163,13 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
         <div className="md:col-span-3 space-y-6 flex flex-col justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 px-3 py-1 rounded-full">
-                {book.genre}
-              </span>
+              {book.genre
+                ? book.genre.split(',').map(g => g.trim()).filter(Boolean).map(g => (
+                    <span key={g} className="text-xs font-bold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 px-3 py-1 rounded-full">
+                      {g}
+                    </span>
+                  ))
+                : null}
               <span className={`text-xs font-bold px-3 py-1 rounded-full ${
                 book.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
                 book.status === 'Ongoing' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' :

@@ -48,7 +48,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       ].some(val => val.toLowerCase().includes(searchTerm.toLowerCase()));
 
       // Dropdown filters
-      const matchesGenre = selectedGenre === 'All' || book.genre === selectedGenre;
+      const matchesGenre = selectedGenre === 'All' || (book.genre && book.genre.split(',').map(g => g.trim()).includes(selectedGenre));
       const matchesLanguage = selectedLanguage === 'All' || book.original_language === selectedLanguage;
       const matchesStatus = selectedStatus === 'All' || book.status === selectedStatus;
       const matchesAgeRating = selectedAgeRating === 'All' || book.age_rating === selectedAgeRating;
@@ -259,6 +259,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     <p className="text-xs text-slate-400 font-medium line-clamp-1 mt-0.5">
                       by {book.author}
                     </p>
+
+                    {/* Multi-Genre Badges */}
+                    {book.genre && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {book.genre.split(',').map(g => g.trim()).filter(Boolean).map(g => (
+                          <span key={g} className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md">
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Tags */}
                     {book.tags && book.tags.length > 0 && (

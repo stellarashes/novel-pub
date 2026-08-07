@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Book, NovelStatus, AgeRating } from '../types';
 import { updateBook } from '../lib/storage';
-import { X, Edit3, Bold, Italic, List, Heading2 } from 'lucide-react';
+import { AVAILABLE_GENRES } from './CreateBookModal';
+import { X, Edit3, Bold, Italic, List, Heading2, Check } from 'lucide-react';
 
 interface EditBookModalProps {
   book: Book;
@@ -19,7 +20,9 @@ export const EditBookModal: React.FC<EditBookModalProps> = ({
   const [title, setTitle] = useState(book.title);
   const [author, setAuthor] = useState(book.author);
   const [description, setDescription] = useState(book.description);
-  const [genre, setGenre] = useState(book.genre);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(
+    book.genre ? book.genre.split(',').map(g => g.trim()).filter(Boolean) : []
+  );
   const [tagsInput, setTagsInput] = useState(book.tags ? book.tags.join(', ') : '');
   const [originalLanguage, setOriginalLanguage] = useState(book.original_language);
   const [status, setStatus] = useState<NovelStatus>(book.status);
@@ -29,6 +32,14 @@ export const EditBookModal: React.FC<EditBookModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
+
+  const toggleGenre = (g: string) => {
+    if (selectedGenres.includes(g)) {
+      setSelectedGenres(prev => prev.filter(item => item !== g));
+    } else {
+      setSelectedGenres(prev => [...prev, g]);
+    }
+  };
 
   const insertRichTag = (tagOpen: string, tagClose: string) => {
     setDescription(prev => `${prev}${tagOpen}${tagClose}`);
@@ -40,12 +51,13 @@ export const EditBookModal: React.FC<EditBookModalProps> = ({
 
     setIsSubmitting(true);
     const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
+    const genreString = selectedGenres.join(', ');
 
     await updateBook(book.id, {
       title: title.trim(),
       author: author.trim(),
       description: description.trim(),
-      genre,
+      genre: genreString,
       tags,
       original_language: originalLanguage,
       status,
@@ -124,19 +136,34 @@ export const EditBookModal: React.FC<EditBookModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Genre</label>
-              <select
-                value={genre}
-                onChange={(e) => setGenre(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-              >
-                {['Fantasy', 'Action', 'Sci-Fi', 'Xianxia', 'Romance', 'Mystery', 'Slice of Life'].map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
+          {/* Multi-Select Genres */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Genres (Select one or more)
+            </label>
+            <div className="flex flex-wrap gap-1.5 bg-slate-950 border border-slate-800 rounded-2xl p-3 max-h-36 overflow-y-auto">
+              {AVAILABLE_GENRES.map(g => {
+                const isSelected = selectedGenres.includes(g);
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => toggleGenre(g)}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1 ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 border-indigo-500 text-white shadow-md'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                    <span>{g}</span>
+                  </button>
+                );
+              })}
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Language</label>
