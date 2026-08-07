@@ -100,7 +100,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     });
   }, [currentChapterIndex, currentChapter?.id, book.id, currentUser]);
 
-  // Real-time Scroll Listener
+  // Real-time Scroll Listener with Debounced Cloud Sync
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (!currentChapter || !currentUser) return;
 
@@ -111,18 +113,29 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
       const scrollPercent = docHeight > 0 ? Math.min(100, Math.max(0, (scrollTop / docHeight) * 100)) : 0;
 
-      saveReadingProgress({
+      const payload = {
         user_id: currentUser.id,
         book_id: book.id,
         chapter_id: currentChapter.id,
         chapter_number: currentChapter.chapter_number,
         scroll_percent: Number(scrollPercent.toFixed(1)),
         scroll_y: Math.round(scrollTop)
-      });
+      };
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      saveTimeoutRef.current = setTimeout(() => {
+        saveReadingProgress(payload);
+      }, 10000);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
   }, [currentChapter, book.id, currentUser]);
 
   // Desktop Keyboard Arrow Navigation (← / →)
@@ -149,10 +162,21 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const changeToChapter = (newIndex: number) => {
     if (newIndex >= 0 && newIndex < chapters.length) {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       setCurrentChapterIndex(newIndex);
       setActiveLineIndex(null);
       const targetChap = chapters[newIndex];
       if (targetChap) {
+        if (currentUser) {
+          saveReadingProgress({
+            user_id: currentUser.id,
+            book_id: book.id,
+            chapter_id: targetChap.id,
+            chapter_number: targetChap.chapter_number,
+            scroll_percent: 0,
+            scroll_y: 0
+          });
+        }
         window.location.hash = `#/book/${book.id}/chapter/${targetChap.id}`;
       }
     }

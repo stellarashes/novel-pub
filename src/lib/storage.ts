@@ -569,7 +569,30 @@ export async function deleteChapter(chapterId: string, bookId: string): Promise<
 
 export async function getReadingProgress(userId: string, bookId: string): Promise<ReadingProgress | null> {
   const allProgress = getLocalItem<ReadingProgress[]>(STORAGE_KEYS.PROGRESS, []);
-  return allProgress.find(p => p.user_id === userId && p.book_id === bookId) || null;
+  const localRecord = allProgress.find(p => p.user_id === userId && p.book_id === bookId) || null;
+
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from('reading_progress')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('book_id', bookId)
+      .maybeSingle();
+
+    if (!error && data) {
+      // Sync local storage cache with latest cloud record
+      const index = allProgress.findIndex(p => p.user_id === userId && p.book_id === bookId);
+      if (index !== -1) {
+        allProgress[index] = data;
+      } else {
+        allProgress.push(data);
+      }
+      setLocalItem(STORAGE_KEYS.PROGRESS, allProgress);
+      return data;
+    }
+  }
+
+  return localRecord;
 }
 
 export async function saveReadingProgress(progress: Omit<ReadingProgress, 'id' | 'updated_at'>): Promise<ReadingProgress> {
@@ -587,8 +610,27 @@ export async function saveReadingProgress(progress: Omit<ReadingProgress, 'id' |
   } else {
     allProgress.push(updatedRecord);
   }
-
   setLocalItem(STORAGE_KEYS.PROGRESS, allProgress);
+
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    const { data, error } = await client.from('reading_progress').upsert(
+      {
+        user_id: progress.user_id,
+        book_id: progress.book_id,
+        chapter_id: progress.chapter_id,
+        chapter_number: progress.chapter_number,
+        scroll_percent: progress.scroll_percent,
+        scroll_y: progress.scroll_y,
+        updated_at: updatedRecord.updated_at
+      },
+      { onConflict: 'user_id,book_id' }
+    ).select().single();
+
+    if (!error && data) return data;
+    if (error) console.error('Failed to save reading progress in Supabase:', error);
+  }
+
   return updatedRecord;
 }
 
