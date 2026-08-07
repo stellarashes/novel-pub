@@ -12,6 +12,7 @@ import { CreateBookModal } from './components/CreateBookModal';
 import { EditBookModal } from './components/EditBookModal';
 import { UploadEpubModal } from './components/UploadEpubModal';
 import { AppendTxtModal } from './components/AppendTxtModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 
 export const App: React.FC = () => {
   const { isAuthenticated, currentUser } = useAuth();
@@ -29,7 +30,10 @@ export const App: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUploadEpubModalOpen, setIsUploadEpubModalOpen] = useState(false);
   const [isAppendTxtModalOpen, setIsAppendTxtModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0);
 
+  // Load Library Books & Reading Progress
   useEffect(() => {
     if (isAuthenticated) {
       loadLibraryData();
@@ -50,21 +54,95 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSelectBook = (book: Book) => {
+  const handleRefreshData = async () => {
+    await loadLibraryData();
+    setDataVersion(v => v + 1);
+  };
+
+  // ----------------------------------------------------
+  // URL HASH ROUTER ENGINE
+  // ----------------------------------------------------
+  useEffect(() => {
+    const handleHashChange = async () => {
+      const hash = window.location.hash;
+
+      // Handle Password Recovery Token Hash
+      if (hash.includes('type=recovery') || hash.includes('access_token=')) {
+        setIsChangePasswordOpen(true);
+        return;
+      }
+
+      const allBooks = books.length > 0 ? books : await fetchBooks();
+
+      // Route 1: Reader View -> #/book/:bookId/chapter/:chapterId
+      const readerMatch = hash.match(/^#\/book\/([^/]+)\/chapter\/([^/]+)$/);
+      if (readerMatch) {
+        const [, bId, cId] = readerMatch;
+        const targetBook = allBooks.find(b => b.id === bId);
+        if (targetBook) {
+          setSelectedBook(targetBook);
+          setSelectedChapterId(cId);
+          setActiveView('reader');
+          return;
+        }
+      }
+
+      // Route 2: Chapter Manager -> #/book/:bookId/edit
+      const editorMatch = hash.match(/^#\/book\/([^/]+)\/edit$/);
+      if (editorMatch) {
+        const [, bId] = editorMatch;
+        const targetBook = allBooks.find(b => b.id === bId);
+        if (targetBook) {
+          setSelectedBook(targetBook);
+          setActiveView('chapter_editor');
+          return;
+        }
+      }
+
+      // Route 3: Book Detail -> #/book/:bookId
+      const bookMatch = hash.match(/^#\/book\/([^/]+)$/);
+      if (bookMatch) {
+        const [, bId] = bookMatch;
+        const targetBook = allBooks.find(b => b.id === bId);
+        if (targetBook) {
+          setSelectedBook(targetBook);
+          setActiveView('book_detail');
+          return;
+        }
+      }
+
+      // Default Route: Library Shelf -> #/
+      setActiveView('library');
+      setSelectedBook(null);
+      setSelectedChapterId(null);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    if (isAuthenticated) {
+      handleHashChange();
+    }
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [isAuthenticated, books]);
+
+  // Navigation Trigger Functions
+  const navigateToLibrary = () => {
+    window.location.hash = '#/';
+  };
+
+  const navigateToBook = (book: Book) => {
     setSelectedBook(book);
-    setActiveView('book_detail');
+    window.location.hash = `#/book/${book.id}`;
   };
 
-  const handleStartReading = (chapterId: string) => {
+  const navigateToReader = (chapterId: string) => {
+    if (!selectedBook) return;
     setSelectedChapterId(chapterId);
-    setActiveView('reader');
+    window.location.hash = `#/book/${selectedBook.id}/chapter/${chapterId}`;
   };
 
-  const handleNavigateHome = () => {
-    setActiveView('library');
-    setSelectedBook(null);
-    setSelectedChapterId(null);
-    loadLibraryData();
+  const navigateToChapterEditor = () => {
+    if (!selectedBook) return;
+    window.location.hash = `#/book/${selectedBook.id}/edit`;
   };
 
   if (!isAuthenticated) {
@@ -80,7 +158,8 @@ export const App: React.FC = () => {
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           onOpenCreateModal={() => setIsCreateModalOpen(true)}
-          onNavigateHome={handleNavigateHome}
+          onNavigateHome={navigateToLibrary}
+          onOpenChangePasswordModal={() => setIsChangePasswordOpen(true)}
         />
       )}
 
@@ -91,7 +170,7 @@ export const App: React.FC = () => {
             books={books}
             progressMap={progressMap}
             searchTerm={searchTerm}
-            onSelectBook={handleSelectBook}
+            onSelectBook={navigateToBook}
             onOpenCreateModal={() => setIsCreateModalOpen(true)}
           />
         )}
@@ -99,21 +178,22 @@ export const App: React.FC = () => {
         {activeView === 'book_detail' && selectedBook && (
           <BookDetailView
             book={selectedBook}
-            onBack={handleNavigateHome}
-            onStartReading={handleStartReading}
+            refreshTrigger={dataVersion}
+            onBack={navigateToLibrary}
+            onStartReading={navigateToReader}
             onOpenEditModal={() => setIsEditModalOpen(true)}
             onOpenUploadEpubModal={() => setIsUploadEpubModalOpen(true)}
             onOpenAppendTxtModal={() => setIsAppendTxtModalOpen(true)}
-            onOpenChapterEditor={() => setActiveView('chapter_editor')}
-            onBookUpdated={loadLibraryData}
+            onOpenChapterEditor={navigateToChapterEditor}
+            onBookUpdated={handleRefreshData}
           />
         )}
 
         {activeView === 'chapter_editor' && selectedBook && (
           <ChapterEditorView
             book={selectedBook}
-            onBack={() => setActiveView('book_detail')}
-            onChaptersSaved={loadLibraryData}
+            onBack={() => navigateToBook(selectedBook)}
+            onChaptersSaved={handleRefreshData}
           />
         )}
 
@@ -121,7 +201,7 @@ export const App: React.FC = () => {
           <ReaderView
             book={selectedBook}
             initialChapterId={selectedChapterId}
-            onBack={() => setActiveView('book_detail')}
+            onBack={() => navigateToBook(selectedBook)}
           />
         )}
       </main>
@@ -131,9 +211,14 @@ export const App: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onBookCreated={(newBook) => {
-          loadLibraryData();
-          handleSelectBook(newBook);
+          handleRefreshData();
+          navigateToBook(newBook);
         }}
+      />
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
       />
 
       {selectedBook && (
@@ -142,23 +227,21 @@ export const App: React.FC = () => {
             book={selectedBook}
             isOpen={isEditModalOpen}
             onClose={() => setIsEditModalOpen(false)}
-            onBookUpdated={() => {
-              loadLibraryData();
-            }}
+            onBookUpdated={handleRefreshData}
           />
 
           <UploadEpubModal
             book={selectedBook}
             isOpen={isUploadEpubModalOpen}
             onClose={() => setIsUploadEpubModalOpen(false)}
-            onChaptersReplaced={loadLibraryData}
+            onChaptersReplaced={handleRefreshData}
           />
 
           <AppendTxtModal
             book={selectedBook}
             isOpen={isAppendTxtModalOpen}
             onClose={() => setIsAppendTxtModalOpen(false)}
-            onChapterAppended={loadLibraryData}
+            onChapterAppended={handleRefreshData}
           />
         </>
       )}

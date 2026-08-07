@@ -7,8 +7,10 @@ interface AuthContextType {
   loading: boolean;
   errorMsg: string | null;
   setErrorMsg: (msg: string | null) => void;
-  login: (email: string, password?: string, initialRole?: UserRole) => Promise<boolean>;
-  register: (email: string, password?: string, initialRole?: UserRole) => Promise<boolean>;
+  login: (email: string, password?: string) => Promise<boolean>;
+  register: (email: string, password?: string, nickname?: string) => Promise<boolean>;
+  resetPasswordForEmail: (email: string) => Promise<boolean>;
+  updatePassword: (newPassword: string) => Promise<boolean>;
   logout: () => Promise<void>;
   toggleRole: () => Promise<void>;
   isAuthenticated: boolean;
@@ -75,9 +77,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!error && profile) {
         const actualRole: UserRole = (profile.role as UserRole) || 'normal';
+        const fallbackNick = profile.nickname || email.split('@')[0];
         const userProf: UserProfile = {
           id: profile.id,
           email: profile.email || email,
+          nickname: fallbackNick,
           role: actualRole,
           dbRole: actualRole,
           created_at: profile.created_at || new Date().toISOString()
@@ -87,14 +91,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (error && error.code === 'PGRST116') {
         // Profile row does not exist yet -> create default profile
         const defaultRole: UserRole = 'normal';
+        const fallbackNick = email.split('@')[0];
         const newProfile: UserProfile = {
           id: userId,
           email,
+          nickname: fallbackNick,
           role: defaultRole,
           dbRole: defaultRole,
           created_at: new Date().toISOString()
         };
-        await supabase.from('profiles').insert({ id: userId, email, role: defaultRole });
+        await supabase.from('profiles').insert({ id: userId, email, nickname: fallbackNick, role: defaultRole });
         setCurrentUser(newProfile);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newProfile));
       } else if (error) {
@@ -137,9 +143,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Local Mock Auth Fallback
       const isDemoAdmin = email.toLowerCase().includes('admin');
       const role: UserRole = isDemoAdmin ? 'admin' : 'normal';
+      const fallbackNick = email.split('@')[0];
       const user: UserProfile = {
         id: `user-${email.split('@')[0]}-${Date.now().toString(36)}`,
         email: email.trim(),
+        nickname: isDemoAdmin ? 'AdminUser' : fallbackNick,
         role,
         dbRole: role,
         created_at: new Date().toISOString()
@@ -154,13 +162,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
-  const register = async (email: string, password?: string): Promise<boolean> => {
+  const register = async (email: string, password?: string, nickname?: string): Promise<boolean> => {
     setErrorMsg(null);
     setLoading(true);
+
+    const cleanNick = (nickname || email.split('@')[0]).trim();
+
+    if (cleanNick.length < 3) {
+      setErrorMsg('Nickname must be at least 3 characters long.');
+      setLoading(false);
+      return false;
+    }
 
     if (isSupabaseConfigured && supabase) {
       if (!password || password.length < 6) {
         setErrorMsg('Password must be at least 6 characters long.');
+        setLoading(false);
+        return false;
+      }
+
+      // Globally unique case-insensitive nickname check
+      const { data: existingNick } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('nickname', cleanNick)
+        .maybeSingle();
+
+      if (existingNick) {
+        setErrorMsg(`The nickname "${cleanNick}" is already taken. Please choose another.`);
         setLoading(false);
         return false;
       }
@@ -181,12 +210,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const newProfile: UserProfile = {
           id: data.user.id,
           email: email.trim(),
+          nickname: cleanNick,
           role: 'normal',
           dbRole: 'normal',
           created_at: new Date().toISOString()
         };
 
-        await supabase.from('profiles').insert({ id: data.user.id, email: email.trim(), role: 'normal' });
+        await supabase.from('profiles').insert({ id: data.user.id, email: email.trim(), nickname: cleanNick, role: 'normal' });
         setCurrentUser(newProfile);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newProfile));
         setLoading(false);
@@ -199,6 +229,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setLoading(false);
     return false;
+  };
+
+  const resetPasswordForEmail = async (email: string): Promise<boolean> => {
+    setErrorMsg(null);
+    setLoading(true);
+
+    if (isSupabaseConfigured && supabase) {
+      const redirectUrl = window.location.origin;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return false;
+      }
+    }
+
+    setLoading(false);
+    return true;
+  };
+
+  const updatePassword = async (newPassword: string): Promise<boolean> => {
+    setErrorMsg(null);
+    setLoading(true);
+
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return false;
+      }
+    }
+
+    setLoading(false);
+    return true;
   };
 
   const logout = async () => {
@@ -233,6 +304,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setErrorMsg,
       login,
       register,
+      resetPasswordForEmail,
+      updatePassword,
       logout,
       toggleRole,
       isAuthenticated: currentUser !== null

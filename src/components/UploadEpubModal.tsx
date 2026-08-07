@@ -22,14 +22,12 @@ export const UploadEpubModal: React.FC<UploadEpubModalProps> = ({
   const [parsedData, setParsedData] = useState<ParsedEpubResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-
-    if (!selected.name.endsWith('.epub')) {
+  const processFile = async (selected: File) => {
+    if (!selected.name.toLowerCase().endsWith('.epub')) {
       setErrorMsg('Please select a valid .epub archive file.');
       return;
     }
@@ -47,6 +45,35 @@ export const UploadEpubModal: React.FC<UploadEpubModalProps> = ({
       setParsedData(null);
     } finally {
       setIsParsing(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) {
+      processFile(selected);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      processFile(droppedFile);
     }
   };
 
@@ -103,14 +130,24 @@ export const UploadEpubModal: React.FC<UploadEpubModalProps> = ({
 
         {/* File Dropzone */}
         <div className="space-y-4">
-          <label className="block border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/70 rounded-2xl p-6 text-center cursor-pointer transition-colors">
+          <label
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`block border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+              isDragging
+                ? 'border-violet-500 bg-violet-500/10 scale-[1.01]'
+                : 'border-slate-700 hover:border-violet-500 bg-slate-950/70'
+            }`}
+          >
             <input
               type="file"
               accept=".epub"
               onChange={handleFileChange}
               className="hidden"
             />
-            <FileText className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+            <FileText className={`w-10 h-10 mx-auto mb-2 transition-colors ${isDragging ? 'text-violet-400' : 'text-slate-500'}`} />
             <span className="text-sm font-semibold text-slate-200 block">
               {file ? file.name : 'Click to select or drag .epub file here'}
             </span>

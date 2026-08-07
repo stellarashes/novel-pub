@@ -12,6 +12,14 @@ RUN npm install
 # Copy application source code
 COPY . .
 
+# Build arguments for Vite environment variables
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
+# Set as environment variables during build time so Vite embeds them into static assets
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
 # Build production bundle
 RUN npm run build
 

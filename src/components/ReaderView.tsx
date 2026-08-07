@@ -147,18 +147,23 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentChapterIndex, chapters.length]);
 
-  const goToPrevChapter = () => {
-    if (currentChapterIndex > 0) {
-      setCurrentChapterIndex(prev => prev - 1);
+  const changeToChapter = (newIndex: number) => {
+    if (newIndex >= 0 && newIndex < chapters.length) {
+      setCurrentChapterIndex(newIndex);
       setActiveLineIndex(null);
+      const targetChap = chapters[newIndex];
+      if (targetChap) {
+        window.location.hash = `#/book/${book.id}/chapter/${targetChap.id}`;
+      }
     }
   };
 
+  const goToPrevChapter = () => {
+    changeToChapter(currentChapterIndex - 1);
+  };
+
   const goToNextChapter = () => {
-    if (currentChapterIndex < chapters.length - 1) {
-      setCurrentChapterIndex(prev => prev + 1);
-      setActiveLineIndex(null);
-    }
+    changeToChapter(currentChapterIndex + 1);
   };
 
   // Group line comments by line index
@@ -213,6 +218,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       line_index: activeLineIndex,
       user_id: currentUser.id,
       user_email: currentUser.email,
+      user_nickname: currentUser.nickname,
       content: newCommentText.trim()
     });
 
@@ -394,7 +400,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                 <button
                   key={chap.id}
                   onClick={() => {
-                    setCurrentChapterIndex(idx);
+                    changeToChapter(idx);
                     setIsTocOpen(false);
                   }}
                   className={`w-full text-left p-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
@@ -443,7 +449,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               return (
                 <div
                   key={lineIdx}
-                  className={`relative group rounded-xl p-2 transition-all duration-200 ${
+                  className={`relative group rounded-xl p-2 pr-16 sm:pr-20 transition-all duration-200 ${
                     isActive ? 'bg-indigo-500/10 ring-1 ring-indigo-500/30' : 'hover:bg-current/5'
                   }`}
                 >
@@ -503,7 +509,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
                           lineComments.map(lc => (
                             <div key={lc.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 space-y-1">
                               <div className="flex items-center justify-between text-[10px] text-slate-400">
-                                <span className="font-semibold text-slate-200">{lc.user_email}</span>
+                                <span className="font-semibold text-slate-200">@{lc.user_nickname || lc.user_email}</span>
                                 <span>{new Date(lc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
                               <p className="text-slate-300 text-xs">{lc.content}</p>

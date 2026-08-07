@@ -13,9 +13,16 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authen
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT NOT NULL,
+  nickname TEXT UNIQUE,
   role TEXT NOT NULL DEFAULT 'normal' CHECK (role IN ('admin', 'normal')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Explicitly add nickname column if profiles table already existed
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS nickname TEXT UNIQUE;
+
+-- Case-insensitive unique index on nickname
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_nickname_lower ON profiles (LOWER(nickname));
 
 -- 2. Books Table
 CREATE TABLE IF NOT EXISTS books (
@@ -67,11 +74,14 @@ CREATE TABLE IF NOT EXISTS novel_reviews (
   book_id UUID REFERENCES books(id) ON DELETE CASCADE,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   user_email TEXT NOT NULL,
+  user_nickname TEXT,
   content TEXT NOT NULL,
   rating INT CHECK (rating >= 1 AND rating <= 5),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.novel_reviews ADD COLUMN IF NOT EXISTS user_nickname TEXT;
 
 -- 6. Paragraph / Line Comments Table
 CREATE TABLE IF NOT EXISTS line_comments (
@@ -82,9 +92,12 @@ CREATE TABLE IF NOT EXISTS line_comments (
   line_hash TEXT,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   user_email TEXT NOT NULL,
+  user_nickname TEXT,
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.line_comments ADD COLUMN IF NOT EXISTS user_nickname TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_line_comments_chap_line ON line_comments(chapter_id, line_index);
 
@@ -122,6 +135,10 @@ DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
 DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
 
 DROP POLICY IF EXISTS "Users manage their own reading progress" ON reading_progress;
+DROP POLICY IF EXISTS "Users can manage their own ratings" ON novel_ratings;
+DROP POLICY IF EXISTS "Users can manage their own reviews" ON novel_reviews;
+DROP POLICY IF EXISTS "Users can manage their own line comments" ON line_comments;
+
 DROP POLICY IF EXISTS "Creators and Admins can manage books" ON books;
 DROP POLICY IF EXISTS "Creators and Admins can manage chapters" ON chapters;
 
@@ -131,6 +148,21 @@ CREATE POLICY "Registered users can view chapters" ON chapters FOR SELECT USING 
 CREATE POLICY "Registered users can view reviews" ON novel_reviews FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Registered users can view ratings" ON novel_ratings FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Registered users can view line comments" ON line_comments FOR SELECT USING (auth.role() = 'authenticated');
+
+-- Ratings RLS Policy: Users can insert & update their own ratings
+CREATE POLICY "Users can manage their own ratings" ON novel_ratings
+  FOR ALL USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Reviews RLS Policy: Users can insert & update their own reviews
+CREATE POLICY "Users can manage their own reviews" ON novel_reviews
+  FOR ALL USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Line Comments RLS Policy: Users can insert & update their own line comments
+CREATE POLICY "Users can manage their own line comments" ON line_comments
+  FOR ALL USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 -- Profiles Table RLS Policies
 CREATE POLICY "Authenticated users can view profiles" ON profiles FOR SELECT USING (auth.role() = 'authenticated');

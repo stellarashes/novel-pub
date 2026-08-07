@@ -16,8 +16,8 @@ const STORAGE_KEYS = {
 
 // Initial Seed Data for Out-of-the-Box Demo Mode
 const INITIAL_DEMO_USERS: UserProfile[] = [
-  { id: 'user-admin-1', email: 'admin@novelpub.dev', role: 'admin', dbRole: 'admin', created_at: new Date().toISOString() },
-  { id: 'user-normal-1', email: 'reader@novelpub.dev', role: 'normal', dbRole: 'normal', created_at: new Date().toISOString() }
+  { id: 'user-admin-1', email: 'admin@novelpub.dev', nickname: 'AdminUser', role: 'admin', dbRole: 'admin', created_at: new Date().toISOString() },
+  { id: 'user-normal-1', email: 'reader@novelpub.dev', nickname: 'BookWorm', role: 'normal', dbRole: 'normal', created_at: new Date().toISOString() }
 ];
 
 const INITIAL_DEMO_BOOKS: Book[] = [
@@ -227,10 +227,41 @@ initLocalStorageSeed();
 
 export async function fetchBooks(): Promise<Book[]> {
   if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase.from('books').select('*').order('created_at', { ascending: false });
-    if (!error && data) return data;
+    const { data: booksData, error } = await supabase.from('books').select('*').order('created_at', { ascending: false });
+    if (!error && booksData) {
+      // Query ratings table to compute average_rating and rating_count dynamically
+      const { data: ratingsData } = await supabase.from('novel_ratings').select('book_id, rating');
+      const ratingsMap: Record<string, number[]> = {};
+      if (ratingsData) {
+        for (const r of ratingsData) {
+          if (!ratingsMap[r.book_id]) ratingsMap[r.book_id] = [];
+          ratingsMap[r.book_id].push(r.rating);
+        }
+      }
+
+      return booksData.map(b => {
+        const rList = ratingsMap[b.id] || [];
+        const avg = rList.length > 0 ? rList.reduce((sum, val) => sum + val, 0) / rList.length : undefined;
+        return {
+          ...b,
+          average_rating: avg ? Number(avg.toFixed(1)) : undefined,
+          rating_count: rList.length
+        };
+      });
+    }
   }
-  return getLocalItem<Book[]>(STORAGE_KEYS.BOOKS, INITIAL_DEMO_BOOKS);
+
+  const books = getLocalItem<Book[]>(STORAGE_KEYS.BOOKS, INITIAL_DEMO_BOOKS);
+  const allRatings = getLocalItem<NovelRating[]>(STORAGE_KEYS.RATINGS, []);
+  return books.map(b => {
+    const rList = allRatings.filter(r => r.book_id === b.id);
+    const avg = rList.length > 0 ? rList.reduce((sum, r) => sum + r.rating, 0) / rList.length : undefined;
+    return {
+      ...b,
+      average_rating: avg ? Number(avg.toFixed(1)) : undefined,
+      rating_count: rList.length
+    };
+  });
 }
 
 export async function fetchBookById(id: string): Promise<Book | null> {
@@ -239,20 +270,49 @@ export async function fetchBookById(id: string): Promise<Book | null> {
 }
 
 export async function createBook(book: Omit<Book, 'id' | 'created_at' | 'updated_at'>): Promise<Book> {
+  const sanitizedDescription = sanitizeHtml(book.description);
+
+  if (isSupabaseConfigured && supabase) {
+    // Only pass physical columns defined on the Supabase PostgreSQL 'books' table
+    const payload = {
+      title: book.title,
+      author: book.author,
+      description: sanitizedDescription,
+      genre: book.genre,
+      tags: book.tags || [],
+      original_language: book.original_language,
+      status: book.status,
+      release_year: book.release_year,
+      translator: book.translator,
+      age_rating: book.age_rating,
+      cover_url: book.cover_url,
+      creator_id: book.creator_id || null
+    };
+
+    const { data, error } = await supabase.from('books').insert(payload).select().single();
+    if (!error && data) {
+      return {
+        ...data,
+        average_rating: 0,
+        rating_count: 0
+      };
+    }
+    if (error) {
+      console.error('Failed to create book in Supabase:', error);
+      throw new Error(error.message);
+    }
+  }
+
+  // Fallback for LocalStorage Mock Engine
   const newBook: Book = {
     ...book,
     id: 'book-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
-    description: sanitizeHtml(book.description),
+    description: sanitizedDescription,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     average_rating: 0,
     rating_count: 0
   };
-
-  if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase.from('books').insert(newBook).select().single();
-    if (!error && data) return data;
-  }
 
   const books = getLocalItem<Book[]>(STORAGE_KEYS.BOOKS, INITIAL_DEMO_BOOKS);
   const updated = [newBook, ...books];
@@ -267,8 +327,11 @@ export async function updateBook(id: string, updates: Partial<Book>): Promise<Bo
   updates.updated_at = new Date().toISOString();
 
   if (isSupabaseConfigured && supabase) {
-    const { data, error } = await supabase.from('books').update(updates).eq('id', id).select().single();
+    // Omit computed properties before executing update on Supabase table
+    const { average_rating, rating_count, ...dbUpdates } = updates;
+    const { data, error } = await supabase.from('books').update(dbUpdates).eq('id', id).select().single();
     if (!error && data) return data;
+    if (error) console.error('Failed to update book in Supabase:', error);
   }
 
   const books = getLocalItem<Book[]>(STORAGE_KEYS.BOOKS, INITIAL_DEMO_BOOKS);
@@ -315,6 +378,24 @@ export async function fetchChapters(bookId: string): Promise<Chapter[]> {
 }
 
 export async function replaceBookChapters(bookId: string, chapters: { title: string; content: string; chapter_number?: number }[]): Promise<Chapter[]> {
+  if (isSupabaseConfigured && supabase) {
+    // Delete old chapters for this book
+    await supabase.from('chapters').delete().eq('book_id', bookId);
+
+    // Prepare payload without mock ID so PostgreSQL generates UUIDs automatically
+    const dbPayload = chapters.map((c, i) => ({
+      book_id: bookId,
+      chapter_number: i + 1,
+      title: c.title || `Chapter ${i + 1}`,
+      content: sanitizeHtml(c.content)
+    }));
+
+    const { data, error } = await supabase.from('chapters').insert(dbPayload).select();
+    if (!error && data) return data.sort((a, b) => a.chapter_number - b.chapter_number);
+    if (error) console.error('Failed to replace chapters in Supabase:', error);
+  }
+
+  // Fallback for local storage mock engine
   const newChapters: Chapter[] = chapters.map((c, i) => ({
     id: `chap-${Date.now()}-${i}`,
     book_id: bookId,
@@ -324,12 +405,6 @@ export async function replaceBookChapters(bookId: string, chapters: { title: str
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   }));
-
-  if (isSupabaseConfigured && supabase) {
-    await supabase.from('chapters').delete().eq('book_id', bookId);
-    const { data } = await supabase.from('chapters').insert(newChapters).select();
-    if (data) return data;
-  }
 
   let allChapters = getLocalItem<Chapter[]>(STORAGE_KEYS.CHAPTERS, INITIAL_DEMO_CHAPTERS);
   allChapters = allChapters.filter(c => c.book_id !== bookId);
@@ -346,6 +421,33 @@ export async function appendOrInsertChapter(
   const existingChapters = await fetchChapters(bookId);
   const position = chapterData.targetPosition || existingChapters.length + 1;
 
+  if (isSupabaseConfigured && supabase) {
+    // Shift chapter numbers for subsequent chapters if inserting in between
+    for (const c of existingChapters) {
+      if (c.chapter_number >= position) {
+        await supabase
+          .from('chapters')
+          .update({ chapter_number: c.chapter_number + 1 })
+          .eq('id', c.id);
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('chapters')
+      .insert({
+        book_id: bookId,
+        chapter_number: position,
+        title: chapterData.title,
+        content: sanitizeHtml(chapterData.content)
+      })
+      .select()
+      .single();
+
+    if (!error && data) return data;
+    if (error) console.error('Failed to insert chapter in Supabase:', error);
+  }
+
+  // Local storage fallback
   const newChapter: Chapter = {
     id: `chap-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     book_id: bookId,
@@ -356,7 +458,6 @@ export async function appendOrInsertChapter(
     updated_at: new Date().toISOString()
   };
 
-  // Re-index subsequent chapters if inserted in between
   const updatedList = existingChapters.map(c => {
     if (c.chapter_number >= position) {
       return { ...c, chapter_number: c.chapter_number + 1 };
@@ -374,12 +475,44 @@ export async function appendOrInsertChapter(
 }
 
 export async function saveReorderedChapters(bookId: string, chapters: Chapter[]): Promise<Chapter[]> {
+  const existing = await fetchChapters(bookId);
+
   const reordered = chapters.map((chap, idx) => ({
     ...chap,
     chapter_number: idx + 1,
     content: sanitizeHtml(chap.content),
     updated_at: new Date().toISOString()
   }));
+
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    // Optimization: Diff list and ONLY update chapters whose chapter_number, title, or content changed
+    const changedChapters = reordered.filter((chap) => {
+      const match = existing.find(e => e.id === chap.id);
+      return !match || match.chapter_number !== chap.chapter_number || match.title !== chap.title || match.content !== chap.content;
+    });
+
+    if (changedChapters.length > 0) {
+      await Promise.all(
+        changedChapters.map(chap => {
+          const match = existing.find(e => e.id === chap.id);
+          const payload: Record<string, any> = {
+            chapter_number: chap.chapter_number,
+            title: chap.title,
+            updated_at: chap.updated_at
+          };
+          if (!match || match.content !== chap.content) {
+            payload.content = chap.content;
+          }
+          return client
+            .from('chapters')
+            .update(payload)
+            .eq('id', chap.id);
+        })
+      );
+    }
+    return await fetchChapters(bookId);
+  }
 
   let allChapters = getLocalItem<Chapter[]>(STORAGE_KEYS.CHAPTERS, INITIAL_DEMO_CHAPTERS);
   allChapters = allChapters.filter(c => c.book_id !== bookId);
@@ -390,10 +523,36 @@ export async function saveReorderedChapters(bookId: string, chapters: Chapter[])
 }
 
 export async function deleteChapter(chapterId: string, bookId: string): Promise<Chapter[]> {
-  let chapters = await fetchChapters(bookId);
-  chapters = chapters.filter(c => c.id !== chapterId);
-  
-  // Re-number
+  const existingChapters = await fetchChapters(bookId);
+  const targetChapter = existingChapters.find(c => c.id === chapterId);
+
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    // 1. Delete target chapter from database
+    await client.from('chapters').delete().eq('id', chapterId);
+
+    // 2. Optimization: Only update subsequent chapters (chapter_number > deleted.chapter_number)
+    if (targetChapter) {
+      const subsequentChapters = existingChapters.filter(
+        c => c.id !== chapterId && c.chapter_number > targetChapter.chapter_number
+      );
+
+      if (subsequentChapters.length > 0) {
+        await Promise.all(
+          subsequentChapters.map(chap =>
+            client
+              .from('chapters')
+              .update({ chapter_number: chap.chapter_number - 1 })
+              .eq('id', chap.id)
+          )
+        );
+      }
+    }
+
+    return await fetchChapters(bookId);
+  }
+
+  let chapters = existingChapters.filter(c => c.id !== chapterId);
   chapters = chapters.map((c, i) => ({ ...c, chapter_number: i + 1 }));
 
   let allChapters = getLocalItem<Chapter[]>(STORAGE_KEYS.CHAPTERS, INITIAL_DEMO_CHAPTERS);
@@ -438,11 +597,35 @@ export async function saveReadingProgress(progress: Omit<ReadingProgress, 'id' |
 // ----------------------------------------------------
 
 export async function getNovelRatings(bookId: string): Promise<NovelRating[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.from('novel_ratings').select('*').eq('book_id', bookId);
+    if (!error && data) return data;
+  }
   const allRatings = getLocalItem<NovelRating[]>(STORAGE_KEYS.RATINGS, []);
   return allRatings.filter(r => r.book_id === bookId);
 }
 
+export async function getUserBookRating(bookId: string, userId: string): Promise<number> {
+  const ratings = await getNovelRatings(bookId);
+  const found = ratings.find(r => r.user_id === userId);
+  return found ? found.rating : 0;
+}
+
 export async function saveNovelRating(bookId: string, userId: string, rating: number): Promise<Book | null> {
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    // Upsert single rating per user per book (PostgreSQL UNIQUE(book_id, user_id))
+    const { error } = await client.from('novel_ratings').upsert(
+      { book_id: bookId, user_id: userId, rating, updated_at: new Date().toISOString() },
+      { onConflict: 'book_id,user_id' }
+    );
+    if (error) console.error('Failed to upsert novel rating in Supabase:', error);
+
+    const books = await fetchBooks();
+    return books.find(b => b.id === bookId) || null;
+  }
+
+  // Local Storage Fallback: Enforce 1 rating per user per book
   let allRatings = getLocalItem<NovelRating[]>(STORAGE_KEYS.RATINGS, []);
   const index = allRatings.findIndex(r => r.book_id === bookId && r.user_id === userId);
 
@@ -460,22 +643,45 @@ export async function saveNovelRating(bookId: string, userId: string, rating: nu
 
   setLocalItem(STORAGE_KEYS.RATINGS, allRatings);
 
-  // Recalculate average rating for book
-  const bookRatings = allRatings.filter(r => r.book_id === bookId);
-  const avg = bookRatings.reduce((sum, r) => sum + r.rating, 0) / bookRatings.length;
-
-  return await updateBook(bookId, {
-    average_rating: Number(avg.toFixed(1)),
-    rating_count: bookRatings.length
-  });
+  const books = await fetchBooks();
+  return books.find(b => b.id === bookId) || null;
 }
 
 export async function getNovelReviews(bookId: string): Promise<NovelReview[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from('novel_reviews')
+      .select('*')
+      .eq('book_id', bookId)
+      .order('created_at', { ascending: false });
+    if (!error && data) return data;
+  }
   const allReviews = getLocalItem<NovelReview[]>(STORAGE_KEYS.REVIEWS, []);
   return allReviews.filter(r => r.book_id === bookId).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 export async function addNovelReview(review: Omit<NovelReview, 'id' | 'created_at'>): Promise<NovelReview> {
+  // 1. If a star rating was selected, update/save the user's single rating entry
+  if (review.rating && review.rating > 0) {
+    await saveNovelRating(review.book_id, review.user_id, review.rating);
+  }
+
+  // 2. Save review comment (users can leave multiple review comments)
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    const { data, error } = await client.from('novel_reviews').insert({
+      book_id: review.book_id,
+      user_id: review.user_id,
+      user_email: review.user_email,
+      user_nickname: review.user_nickname,
+      content: sanitizeHtml(review.content),
+      rating: review.rating
+    }).select().single();
+
+    if (!error && data) return data;
+    if (error) console.error('Failed to add novel review in Supabase:', error);
+  }
+
   const allReviews = getLocalItem<NovelReview[]>(STORAGE_KEYS.REVIEWS, []);
   const newReview: NovelReview = {
     id: `rev-${Date.now()}`,
@@ -494,11 +700,36 @@ export async function addNovelReview(review: Omit<NovelReview, 'id' | 'created_a
 // ----------------------------------------------------
 
 export async function getLineComments(chapterId: string): Promise<LineComment[]> {
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase
+      .from('line_comments')
+      .select('*')
+      .eq('chapter_id', chapterId)
+      .order('created_at', { ascending: true });
+    if (!error && data) return data;
+  }
   const allComments = getLocalItem<LineComment[]>(STORAGE_KEYS.LINE_COMMENTS, INITIAL_LINE_COMMENTS);
   return allComments.filter(c => c.chapter_id === chapterId);
 }
 
 export async function addLineComment(comment: Omit<LineComment, 'id' | 'created_at'>): Promise<LineComment> {
+  if (isSupabaseConfigured && supabase) {
+    const client = supabase;
+    const { data, error } = await client.from('line_comments').insert({
+      book_id: comment.book_id,
+      chapter_id: comment.chapter_id,
+      line_index: comment.line_index,
+      line_hash: comment.line_hash,
+      user_id: comment.user_id,
+      user_email: comment.user_email,
+      user_nickname: comment.user_nickname,
+      content: sanitizeHtml(comment.content)
+    }).select().single();
+
+    if (!error && data) return data;
+    if (error) console.error('Failed to add line comment in Supabase:', error);
+  }
+
   const allComments = getLocalItem<LineComment[]>(STORAGE_KEYS.LINE_COMMENTS, INITIAL_LINE_COMMENTS);
   const newComment: LineComment = {
     id: `lc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,

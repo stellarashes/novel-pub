@@ -1,19 +1,21 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { BookOpen, PlusCircle, LogOut, Shield, User, Search, Sparkles } from 'lucide-react';
+import { BookOpen, PlusCircle, LogOut, Shield, User, Search, Sparkles, KeyRound } from 'lucide-react';
 
 interface NavbarProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
   onOpenCreateModal: () => void;
   onNavigateHome: () => void;
+  onOpenChangePasswordModal: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   searchTerm,
   onSearchChange,
   onOpenCreateModal,
-  onNavigateHome
+  onNavigateHome,
+  onOpenChangePasswordModal
 }) => {
   const { currentUser, logout, toggleRole } = useAuth();
 
@@ -66,6 +68,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden sm:inline">New Novel</span>
               </button>
 
+              {/* User Nickname Tag */}
+              <span className="text-xs font-semibold text-slate-300 hidden md:inline border border-slate-800 bg-slate-950 px-2.5 py-1.5 rounded-xl">
+                @{currentUser.nickname || currentUser.email.split('@')[0]}
+              </span>
+
               {/* Role Indicator / Admin Preview Mode Switcher */}
               {currentUser.dbRole === 'admin' ? (
                 <button
@@ -90,6 +97,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>Normal</span>
                 </div>
               )}
+
+              {/* Change Password Button */}
+              <button
+                onClick={onOpenChangePasswordModal}
+                title="Change Account Password"
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
 
               {/* Logout Button */}
               <button

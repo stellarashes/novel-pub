@@ -7,6 +7,7 @@ import {
   getNovelReviews,
   addNovelReview,
   saveNovelRating,
+  getUserBookRating,
   deleteBook
 } from '../lib/storage';
 import { sanitizeHtml } from '../lib/sanitizer';
@@ -24,6 +25,7 @@ interface BookDetailViewProps {
   onOpenAppendTxtModal: () => void;
   onOpenChapterEditor: () => void;
   onBookUpdated: () => void;
+  refreshTrigger?: number;
 }
 
 export const BookDetailView: React.FC<BookDetailViewProps> = ({
@@ -34,7 +36,8 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
   onOpenUploadEpubModal,
   onOpenAppendTxtModal,
   onOpenChapterEditor,
-  onBookUpdated
+  onBookUpdated,
+  refreshTrigger
 }) => {
   const { currentUser } = useAuth();
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -50,7 +53,7 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
 
   useEffect(() => {
     loadData();
-  }, [book.id, currentUser]);
+  }, [book.id, currentUser, refreshTrigger]);
 
   const loadData = async () => {
     const chaps = await fetchChapters(book.id);
@@ -59,6 +62,8 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
     if (currentUser) {
       const prog = await getReadingProgress(currentUser.id, book.id);
       setProgress(prog);
+      const userR = await getUserBookRating(book.id, currentUser.id);
+      setUserRating(userR);
     }
 
     const revs = await getNovelReviews(book.id);
@@ -82,12 +87,14 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
       book_id: book.id,
       user_id: currentUser.id,
       user_email: currentUser.email,
+      user_nickname: currentUser.nickname,
       content: newReviewContent.trim(),
       rating: userRating || 5
     });
 
     setNewReviewContent('');
     setIsSubmittingReview(false);
+    onBookUpdated();
     loadData();
   };
 
@@ -130,6 +137,25 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Additional Rating Display Below Cover Image */}
+          <div className="mt-3 w-48 sm:w-full bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-center gap-2 shadow-md">
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  className={`w-4 h-4 ${
+                    star <= Math.round(book.average_rating || 0)
+                      ? 'text-amber-400 fill-amber-400'
+                      : 'text-slate-700'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-xs font-extrabold text-white">
+              {book.average_rating ? Number(book.average_rating).toFixed(1) : 'N/A'}
+            </span>
           </div>
         </div>
 
@@ -364,7 +390,15 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
             reviews.map(rev => (
               <div key={rev.id} className="bg-slate-950/60 border border-slate-800/60 rounded-2xl p-4 space-y-2">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span className="font-semibold text-slate-200">{rev.user_email}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-200">@{rev.user_nickname || rev.user_email}</span>
+                    {Boolean(rev.rating && rev.rating > 0) && (
+                      <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full text-[11px] font-bold text-amber-300">
+                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                        <span>{rev.rating} / 5</span>
+                      </div>
+                    )}
+                  </div>
                   <span>{new Date(rev.created_at).toLocaleDateString()}</span>
                 </div>
                 <p className="text-sm text-slate-300 leading-relaxed">{rev.content}</p>

@@ -3,6 +3,7 @@ export type UserRole = 'admin' | 'normal';
 export interface UserProfile {
   id: string;
   email: string;
+  nickname: string;
   role: UserRole; // Active mode for UI permissions
   dbRole: UserRole; // Actual permanent role stored in database
   created_at: string;
@@ -65,6 +66,7 @@ export interface NovelReview {
   book_id: string;
   user_id: string;
   user_email: string;
+  user_nickname?: string;
   content: string;
   rating?: number;
   created_at: string;
@@ -78,6 +80,7 @@ export interface LineComment {
   line_hash?: string;
   user_id: string;
   user_email: string;
+  user_nickname?: string;
   content: string;
   created_at: string;
 }
