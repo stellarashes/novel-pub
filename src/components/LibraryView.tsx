@@ -40,12 +40,28 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     }
   };
 
-  // Extract all unique tags across books
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    books.forEach(b => b.tags?.forEach(t => set.add(t)));
-    return Array.from(set);
-  }, [books]);
+  // Extract top 8 most frequent tags across books
+  const topTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    books.forEach(b => {
+      b.tags?.forEach(t => {
+        const cleanTag = t.trim();
+        if (cleanTag) {
+          counts.set(cleanTag, (counts.get(cleanTag) || 0) + 1);
+        }
+      });
+    });
+
+    const sorted = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(entry => entry[0])
+      .slice(0, 8);
+
+    if (selectedTag && !sorted.includes(selectedTag)) {
+      return [...sorted, selectedTag];
+    }
+    return sorted;
+  }, [books, selectedTag]);
 
   // Filter books based on search & active filter criteria
   const filteredBooks = useMemo(() => {
@@ -110,17 +126,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           {hasActiveFilters && (
             <button
               onClick={resetFilters}
-              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded-xl transition-all"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className="w-3.5 h-3.5" />
               Reset Filters
             </button>
           )}
         </div>
 
-        {/* Dropdown Filters Grid */}
+        {/* Filter Dropdowns */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* Genre */}
           <div>
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Genre</label>
             <select
@@ -132,9 +147,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             </select>
           </div>
 
-          {/* Language */}
           <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Original Language</label>
+            <label className="block text-[11px] font-medium text-slate-400 mb-1">Language</label>
             <select
               value={selectedLanguage}
               onChange={(e) => setSelectedLanguage(e.target.value)}
@@ -144,7 +158,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             </select>
           </div>
 
-          {/* Status */}
           <div>
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Status</label>
             <select
@@ -156,7 +169,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             </select>
           </div>
 
-          {/* Age Rating */}
           <div>
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Age Rating</label>
             <select
@@ -169,11 +181,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           </div>
         </div>
 
-        {/* Popular Tags List */}
-        {allTags.length > 0 && (
+        {/* Top 10 Popular Tags List */}
+        {topTags.length > 0 && (
           <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium text-slate-400 mr-1">Tags:</span>
-            {allTags.map(tag => {
+            <span className="text-[11px] font-medium text-slate-400 mr-1">Top Tags:</span>
+            {topTags.map(tag => {
               const isSelected = selectedTag === tag;
               return (
                 <button
