@@ -16,8 +16,8 @@ const STORAGE_KEYS = {
 
 // Initial Seed Data for Out-of-the-Box Demo Mode
 const INITIAL_DEMO_USERS: UserProfile[] = [
-  { id: 'user-admin-1', email: 'admin@novelpub.dev', role: 'admin', created_at: new Date().toISOString() },
-  { id: 'user-normal-1', email: 'reader@novelpub.dev', role: 'normal', created_at: new Date().toISOString() }
+  { id: 'user-admin-1', email: 'admin@novelpub.dev', role: 'admin', dbRole: 'admin', created_at: new Date().toISOString() },
+  { id: 'user-normal-1', email: 'reader@novelpub.dev', role: 'normal', dbRole: 'normal', created_at: new Date().toISOString() }
 ];
 
 const INITIAL_DEMO_BOOKS: Book[] = [

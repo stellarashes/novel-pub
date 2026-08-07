@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
-  login: (email: string, role?: UserRole) => void;
-  register: (email: string) => void;
-  logout: () => void;
-  toggleRole: () => void;
+  loading: boolean;
+  errorMsg: string | null;
+  setErrorMsg: (msg: string | null) => void;
+  login: (email: string, password?: string, initialRole?: UserRole) => Promise<boolean>;
+  register: (email: string, password?: string, initialRole?: UserRole) => Promise<boolean>;
+  logout: () => Promise<void>;
+  toggleRole: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -22,50 +26,211 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error('Failed to load auth user:', e);
     }
-    // Default logged in user for seamless testing experience
-    return {
-      id: 'user-admin-1',
-      email: 'admin@novelpub.dev',
-      role: 'admin',
-      created_at: new Date().toISOString()
-    };
+    return null;
   });
 
+  const [loading, setLoading] = useState<boolean>(isSupabaseConfigured);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Sync Supabase Auth state if configured
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      return;
     }
-  }, [currentUser]);
 
-  const login = (email: string, role: UserRole = 'normal') => {
-    const user: UserProfile = {
-      id: `user-${email.split('@')[0]}-${Date.now().toString(36)}`,
-      email,
-      role,
-      created_at: new Date().toISOString()
-    };
-    setCurrentUser(user);
+    // Check active session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        syncUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setCurrentUser(null);
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        await syncUserProfile(session.user.id, session.user.email || '');
+      } else {
+        setCurrentUser(null);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Sync user profile from Supabase 'profiles' table
+  const syncUserProfile = async (userId: string, email: string) => {
+    if (!supabase) return;
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (!error && profile) {
+        const actualRole: UserRole = (profile.role as UserRole) || 'normal';
+        const userProf: UserProfile = {
+          id: profile.id,
+          email: profile.email || email,
+          role: actualRole,
+          dbRole: actualRole,
+          created_at: profile.created_at || new Date().toISOString()
+        };
+        setCurrentUser(userProf);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProf));
+      } else if (error && error.code === 'PGRST116') {
+        // Profile row does not exist yet -> create default profile
+        const defaultRole: UserRole = 'normal';
+        const newProfile: UserProfile = {
+          id: userId,
+          email,
+          role: defaultRole,
+          dbRole: defaultRole,
+          created_at: new Date().toISOString()
+        };
+        await supabase.from('profiles').insert({ id: userId, email, role: defaultRole });
+        setCurrentUser(newProfile);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newProfile));
+      } else if (error) {
+        console.error('Error querying profile table:', error);
+      }
+    } catch (err: any) {
+      console.error('Failed to sync user profile exception:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const register = (email: string) => {
-    login(email, 'normal');
+  const login = async (email: string, password?: string): Promise<boolean> => {
+    setErrorMsg(null);
+    setLoading(true);
+
+    if (isSupabaseConfigured && supabase) {
+      if (!password) {
+        setErrorMsg('Password is required for Supabase authentication.');
+        setLoading(false);
+        return false;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return false;
+      }
+
+      if (data.user) {
+        await syncUserProfile(data.user.id, data.user.email || email);
+        return true;
+      }
+    } else {
+      // Local Mock Auth Fallback
+      const isDemoAdmin = email.toLowerCase().includes('admin');
+      const role: UserRole = isDemoAdmin ? 'admin' : 'normal';
+      const user: UserProfile = {
+        id: `user-${email.split('@')[0]}-${Date.now().toString(36)}`,
+        email: email.trim(),
+        role,
+        dbRole: role,
+        created_at: new Date().toISOString()
+      };
+      setCurrentUser(user);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+      setLoading(false);
+      return true;
+    }
+
+    setLoading(false);
+    return false;
   };
 
-  const logout = () => {
+  const register = async (email: string, password?: string): Promise<boolean> => {
+    setErrorMsg(null);
+    setLoading(true);
+
+    if (isSupabaseConfigured && supabase) {
+      if (!password || password.length < 6) {
+        setErrorMsg('Password must be at least 6 characters long.');
+        setLoading(false);
+        return false;
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return false;
+      }
+
+      if (data.user) {
+        // All new user accounts strictly default to 'normal' role in database
+        const newProfile: UserProfile = {
+          id: data.user.id,
+          email: email.trim(),
+          role: 'normal',
+          dbRole: 'normal',
+          created_at: new Date().toISOString()
+        };
+
+        await supabase.from('profiles').insert({ id: data.user.id, email: email.trim(), role: 'normal' });
+        setCurrentUser(newProfile);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newProfile));
+        setLoading(false);
+        return true;
+      }
+    } else {
+      // Local Mock Register Fallback
+      return login(email, password);
+    }
+
+    setLoading(false);
+    return false;
+  };
+
+  const logout = async () => {
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut();
+    }
     setCurrentUser(null);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  const toggleRole = () => {
+  const toggleRole = async () => {
     if (!currentUser) return;
+    // Strictly prevent normal users from toggling to admin mode!
+    if (currentUser.dbRole !== 'admin') {
+      alert('Only Admin users can toggle preview modes.');
+      return;
+    }
+
+    // Admins can toggle active viewing mode between 'admin' and 'normal' (for previewing reader mode)
     const newRole: UserRole = currentUser.role === 'admin' ? 'normal' : 'admin';
-    setCurrentUser({ ...currentUser, role: newRole });
+    const updated = { ...currentUser, role: newRole };
+
+    setCurrentUser(updated);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
   };
 
   return (
     <AuthContext.Provider value={{
       currentUser,
+      loading,
+      errorMsg,
+      setErrorMsg,
       login,
       register,
       logout,

@@ -3,7 +3,8 @@ export type UserRole = 'admin' | 'normal';
 export interface UserProfile {
   id: string;
   email: string;
-  role: UserRole;
+  role: UserRole; // Active mode for UI permissions
+  dbRole: UserRole; // Actual permanent role stored in database
   created_at: string;
 }
 

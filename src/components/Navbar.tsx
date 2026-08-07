@@ -66,24 +66,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden sm:inline">New Novel</span>
               </button>
 
-              {/* Role Toggle Switcher for Permissions Testing */}
-              <button
-                onClick={toggleRole}
-                title="Click to toggle user role between Normal and Admin for testing"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                  currentUser.role === 'admin'
-                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
-                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
-                }`}
-              >
-                {currentUser.role === 'admin' ? (
+              {/* Role Indicator / Admin Preview Mode Switcher */}
+              {currentUser.dbRole === 'admin' ? (
+                <button
+                  onClick={toggleRole}
+                  title="Admin user: Click to toggle preview view mode between Admin and Normal"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                    currentUser.role === 'admin'
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                  }`}
+                >
                   <Shield className="w-3.5 h-3.5 text-amber-400" />
-                ) : (
+                  <span className="capitalize">{currentUser.role === 'admin' ? 'Admin' : 'Normal (Preview)'}</span>
+                  <Sparkles className="w-3 h-3 opacity-60 ml-0.5" />
+                </button>
+              ) : (
+                <div
+                  title="Standard User Account"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 select-none"
+                >
                   <User className="w-3.5 h-3.5 text-emerald-400" />
-                )}
-                <span className="capitalize">{currentUser.role}</span>
-                <Sparkles className="w-3 h-3 opacity-60 ml-0.5" />
-              </button>
+                  <span>Normal</span>
+                </div>
+              )}
 
               {/* Logout Button */}
               <button

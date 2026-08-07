@@ -4,6 +4,11 @@
 -- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Grant schema privileges to authenticated & anon roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
+
 -- 1. Profiles Table (User Roles: admin, normal)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
@@ -105,12 +110,32 @@ ALTER TABLE novel_reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE line_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_progress ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if re-running migration
+DROP POLICY IF EXISTS "Registered users can view books" ON books;
+DROP POLICY IF EXISTS "Registered users can view chapters" ON chapters;
+DROP POLICY IF EXISTS "Registered users can view reviews" ON novel_reviews;
+DROP POLICY IF EXISTS "Registered users can view ratings" ON novel_ratings;
+DROP POLICY IF EXISTS "Registered users can view line comments" ON line_comments;
+
+DROP POLICY IF EXISTS "Authenticated users can view profiles" ON profiles;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON profiles;
+DROP POLICY IF EXISTS "Users can update their own profile" ON profiles;
+
+DROP POLICY IF EXISTS "Users manage their own reading progress" ON reading_progress;
+DROP POLICY IF EXISTS "Creators and Admins can manage books" ON books;
+DROP POLICY IF EXISTS "Creators and Admins can manage chapters" ON chapters;
+
 -- RLS Policies: Authenticated users can view all books & chapters
 CREATE POLICY "Registered users can view books" ON books FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Registered users can view chapters" ON chapters FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Registered users can view reviews" ON novel_reviews FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Registered users can view ratings" ON novel_ratings FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Registered users can view line comments" ON line_comments FOR SELECT USING (auth.role() = 'authenticated');
+
+-- Profiles Table RLS Policies
+CREATE POLICY "Authenticated users can view profiles" ON profiles FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Users can insert their own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Reading progress is private per user
 CREATE POLICY "Users manage their own reading progress" ON reading_progress
@@ -127,3 +152,23 @@ CREATE POLICY "Creators and Admins can manage chapters" ON chapters
   FOR ALL USING (
     EXISTS (SELECT 1 FROM books WHERE id = chapters.book_id AND (creator_id = auth.uid() OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')))
   );
+
+-- Automatic Profile Creation Trigger when a User Signs Up
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, role)
+  VALUES (new.id, new.email, 'normal')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Grant full table & sequence access to authenticated & anon roles (governed by RLS policies)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
