@@ -9,6 +9,6 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    allowedHosts: ["d4f4-45-27-79-95.ngrok-free.app", "novelpub.stellarashes.com"],
+    allowedHosts: ["d4f4-45-27-79-95.ngrok-free.app", ".stellarashes.com"],
   },
 });
