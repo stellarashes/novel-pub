@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Book, ReadingProgress, NovelStatus, AgeRating } from '../types';
 import { AVAILABLE_GENRES } from './CreateBookModal';
-import { Star, BookOpen, Clock, Tag, Globe, CheckCircle2, AlertCircle, Filter, RotateCcw } from 'lucide-react';
+import { Star, BookOpen, Clock, Tag, Globe, CheckCircle2, AlertCircle, Filter, RotateCcw, X } from 'lucide-react';
 
 interface LibraryViewProps {
   books: Book[];
@@ -30,6 +30,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [selectedLanguage, setSelectedLanguage] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'All' | NovelStatus>('All');
   const [selectedAgeRating, setSelectedAgeRating] = useState<'All' | AgeRating>('All');
+  const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('novelpub_hero_banner_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissBanner = () => {
+    setIsBannerDismissed(true);
+    try {
+      localStorage.setItem('novelpub_hero_banner_dismissed', 'true');
+    } catch (e) {
+      console.error('Failed to save banner dismiss state:', e);
+    }
+  };
   
   const selectedGenre = activeUrlGenre || 'All';
   const selectedTag = activeUrlTag || null;
@@ -113,20 +129,30 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
       {/* Library Hero Banner */}
-      <div className="relative rounded-3xl bg-gradient-to-r from-indigo-900/40 via-slate-900 to-violet-900/40 border border-slate-800/80 p-6 sm:p-8 overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-3xl rounded-full pointer-events-none" />
-        <div className="relative z-10 max-w-2xl">
-          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-full">
-            Global Novel Library
-          </span>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white mt-3 tracking-tight">
-            Discover & Publish Web Novels
-          </h1>
-          <p className="text-slate-300 text-sm sm:text-base mt-2 leading-relaxed">
-            Upload ePubs, append TXT chapters, reorder chapters, and track your reading scroll progress across devices.
-          </p>
+      {!isBannerDismissed && (
+        <div className="relative rounded-3xl bg-gradient-to-r from-indigo-900/40 via-slate-900 to-violet-900/40 border border-slate-800/80 p-6 sm:p-8 overflow-hidden shadow-2xl">
+          <button
+            onClick={handleDismissBanner}
+            className="absolute top-4 right-4 z-20 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors"
+            title="Dismiss banner"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 blur-3xl rounded-full pointer-events-none" />
+          <div className="relative z-10 max-w-2xl">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-full">
+              Global Novel Library
+            </span>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-white mt-3 tracking-tight">
+              Discover & Publish Web Novels
+            </h1>
+            <p className="text-slate-300 text-sm sm:text-base mt-2 leading-relaxed">
+              Upload ePubs, append TXT chapters, reorder chapters, and track your reading scroll progress across devices.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Filter Controls Toolbar */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-md space-y-4">
