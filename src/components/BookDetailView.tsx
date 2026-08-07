@@ -165,9 +165,17 @@ export const BookDetailView: React.FC<BookDetailViewProps> = ({
             <div className="flex flex-wrap items-center gap-2 mb-2">
               {book.genre
                 ? book.genre.split(',').map(g => g.trim()).filter(Boolean).map(g => (
-                    <span key={g} className="text-xs font-bold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 px-3 py-1 rounded-full">
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => {
+                        window.location.hash = `#/genre/${encodeURIComponent(g)}`;
+                      }}
+                      className="text-xs font-bold uppercase tracking-wider bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 hover:text-indigo-300 px-3 py-1 rounded-full transition-all cursor-pointer"
+                      title={`Filter novels by genre: ${g}`}
+                    >
                       {g}
-                    </span>
+                    </button>
                   ))
                 : null}
               <span className={`text-xs font-bold px-3 py-1 rounded-full ${

@@ -24,6 +24,7 @@ export const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'library' | 'book_detail' | 'chapter_editor' | 'reader'>('library');
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
+  const [urlGenre, setUrlGenre] = useState<string>('All');
   const [urlTag, setUrlTag] = useState<string | null>(null);
 
   // Modal States
@@ -112,19 +113,22 @@ export const App: React.FC = () => {
         }
       }
 
-      // Route 4: Tag Filter -> #/tag/:tagName
-      const tagMatch = hash.match(/^#\/tag\/([^/]+)$/);
-      if (tagMatch) {
-        const tagName = decodeURIComponent(tagMatch[1]);
-        setUrlTag(tagName);
-        setActiveView('library');
-        setSelectedBook(null);
-        setSelectedChapterId(null);
-        return;
+      // Route 4: Library Filter Route (Genre & Tag support e.g. #/genre/Xianxia/tag/Reincarnation)
+      let parsedGenre = 'All';
+      let parsedTag: string | null = null;
+
+      const genreMatch = hash.match(/genre\/([^/?#]+)/i);
+      if (genreMatch) {
+        parsedGenre = decodeURIComponent(genreMatch[1]);
       }
 
-      // Default Route: Library Shelf -> #/
-      setUrlTag(null);
+      const tagMatch = hash.match(/tag\/([^/?#]+)/i);
+      if (tagMatch) {
+        parsedTag = decodeURIComponent(tagMatch[1]);
+      }
+
+      setUrlGenre(parsedGenre);
+      setUrlTag(parsedTag);
       setActiveView('library');
       setSelectedBook(null);
       setSelectedChapterId(null);
@@ -184,6 +188,7 @@ export const App: React.FC = () => {
             books={books}
             progressMap={progressMap}
             searchTerm={searchTerm}
+            activeUrlGenre={urlGenre}
             activeUrlTag={urlTag}
             onSelectBook={navigateToBook}
             onOpenCreateModal={() => setIsCreateModalOpen(true)}

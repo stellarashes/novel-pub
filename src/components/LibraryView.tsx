@@ -7,6 +7,7 @@ interface LibraryViewProps {
   books: Book[];
   progressMap: Record<string, ReadingProgress>;
   searchTerm: string;
+  activeUrlGenre?: string;
   activeUrlTag?: string | null;
   onSelectBook: (book: Book) => void;
   onOpenCreateModal: () => void;
@@ -21,23 +22,36 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   books,
   progressMap,
   searchTerm,
+  activeUrlGenre,
   activeUrlTag,
   onSelectBook,
   onOpenCreateModal
 }) => {
-  const [selectedGenre, setSelectedGenre] = useState('All');
   const [selectedLanguage, setSelectedLanguage] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'All' | NovelStatus>('All');
   const [selectedAgeRating, setSelectedAgeRating] = useState<'All' | AgeRating>('All');
   
+  const selectedGenre = activeUrlGenre || 'All';
   const selectedTag = activeUrlTag || null;
 
-  const handleToggleTag = (tag: string) => {
-    if (selectedTag === tag) {
+  const updateUrlFilters = (genre: string, tag: string | null) => {
+    const parts: string[] = [];
+    if (genre && genre !== 'All') {
+      parts.push(`genre/${encodeURIComponent(genre)}`);
+    }
+    if (tag) {
+      parts.push(`tag/${encodeURIComponent(tag)}`);
+    }
+
+    if (parts.length === 0) {
       window.location.hash = '#/';
     } else {
-      window.location.hash = `#/tag/${encodeURIComponent(tag)}`;
+      window.location.hash = `#/${parts.join('/')}`;
     }
+  };
+
+  const handleToggleTag = (tag: string) => {
+    updateUrlFilters(selectedGenre, selectedTag === tag ? null : tag);
   };
 
   // Extract top 8 most frequent tags across books
@@ -87,11 +101,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   }, [books, searchTerm, selectedGenre, selectedLanguage, selectedStatus, selectedAgeRating, selectedTag]);
 
   const resetFilters = () => {
-    setSelectedGenre('All');
     setSelectedLanguage('All');
     setSelectedStatus('All');
     setSelectedAgeRating('All');
-    window.location.hash = '#/';
+    updateUrlFilters('All', null);
   };
 
   const hasActiveFilters = selectedGenre !== 'All' || selectedLanguage !== 'All' || selectedStatus !== 'All' || selectedAgeRating !== 'All' || selectedTag !== null;
@@ -140,7 +153,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <label className="block text-[11px] font-medium text-slate-400 mb-1">Genre</label>
             <select
               value={selectedGenre}
-              onChange={(e) => setSelectedGenre(e.target.value)}
+              onChange={(e) => updateUrlFilters(e.target.value, selectedTag)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             >
               {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
@@ -244,7 +257,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-violet-950 p-6 flex flex-col justify-between">
                       <BookOpen className="w-10 h-10 text-indigo-400 opacity-40" />
                       <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">{book.genre}</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 font-semibold">
+                          {selectedGenre !== 'All' && book.genre && book.genre.split(',').map(g => g.trim()).includes(selectedGenre)
+                            ? selectedGenre
+                            : (book.genre ? book.genre.split(',')[0] : 'Novel')}
+                        </span>
                         <h3 className="text-lg font-bold text-white line-clamp-3 mt-1">{book.title}</h3>
                       </div>
                     </div>
@@ -288,35 +305,55 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     {book.genre && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {book.genre.split(',').map(g => g.trim()).filter(Boolean).map(g => (
-                          <span key={g} className="text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-md">
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateUrlFilters(selectedGenre === g ? 'All' : g, selectedTag);
+                            }}
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                              selectedGenre === g
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20'
+                            }`}
+                            title={`Filter by genre: ${g}`}
+                          >
                             {g}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     )}
 
                     {/* Tags */}
-                    {book.tags && book.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2.5">
-                        {book.tags.slice(0, 3).map(t => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleTag(t);
-                            }}
-                            className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-all ${
-                              selectedTag === t
-                                ? 'bg-indigo-600 text-white shadow-sm'
-                                : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                            }`}
-                          >
-                            #{t}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {book.tags && book.tags.length > 0 && (() => {
+                      const activeMatch = selectedTag && book.tags.includes(selectedTag);
+                      const displayTags = activeMatch
+                        ? [selectedTag, ...book.tags.filter(t => t !== selectedTag)].slice(0, 3)
+                        : book.tags.slice(0, 3);
+
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-2.5">
+                          {displayTags.map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleTag(t);
+                              }}
+                              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-all ${
+                                selectedTag === t
+                                  ? 'bg-indigo-600 text-white shadow-sm font-semibold'
+                                  : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                              }`}
+                            >
+                              #{t}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Reading Progress Indicator */}
