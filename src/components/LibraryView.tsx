@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Book, ReadingProgress, NovelStatus, AgeRating } from '../types';
 import { AVAILABLE_GENRES } from './CreateBookModal';
-import { Star, BookOpen, Clock, Tag, Globe, CheckCircle2, AlertCircle, Filter, RotateCcw, X } from 'lucide-react';
+import { Star, BookOpen, Clock, Tag, Globe, CheckCircle2, AlertCircle, Filter, RotateCcw, X, ChevronDown } from 'lucide-react';
 
 interface LibraryViewProps {
   books: Book[];
@@ -30,6 +30,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [selectedLanguage, setSelectedLanguage] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'All' | NovelStatus>('All');
   const [selectedAgeRating, setSelectedAgeRating] = useState<'All' | AgeRating>('All');
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('novelpub_hero_banner_dismissed') === 'true';
@@ -154,95 +155,132 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </div>
       )}
 
-      {/* Filter Controls Toolbar */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-md space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Filter className="w-4 h-4 text-indigo-400" />
+      {/* Filter Controls Toolbar (Compact when collapsed with no active filters) */}
+      {!isFiltersOpen && !hasActiveFilters ? (
+        <div className="flex items-center justify-start">
+          <button
+            onClick={() => setIsFiltersOpen(true)}
+            className="inline-flex items-center gap-2 bg-slate-900/90 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-md group"
+          >
+            <Filter className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
             <span>Filter Novels ({filteredBooks.length})</span>
-          </div>
-
-          {hasActiveFilters && (
-            <button
-              onClick={resetFilters}
-              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded-xl transition-all"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Reset Filters
-            </button>
-          )}
+            <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors ml-0.5" />
+          </button>
         </div>
+      ) : (
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur-md space-y-4">
+          <div
+            onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+            className="flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none"
+          >
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Filter className="w-4 h-4 text-indigo-400" />
+              <span>Filter Novels ({filteredBooks.length})</span>
+              {hasActiveFilters && (
+                <span className="text-[10px] bg-indigo-600 text-white font-bold px-2 py-0.5 rounded-full ml-1">
+                  Active Filters
+                </span>
+              )}
+            </div>
 
-        {/* Filter Dropdowns */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Genre</label>
-            <select
-              value={selectedGenre}
-              onChange={(e) => updateUrlFilters(e.target.value, selectedTag)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Language</label>
-            <select
-              value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Status</label>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value as any)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-slate-400 mb-1">Age Rating</label>
-            <select
-              value={selectedAgeRating}
-              onChange={(e) => setSelectedAgeRating(e.target.value as any)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              {AGE_RATINGS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* Top 10 Popular Tags List */}
-        {topTags.length > 0 && (
-          <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium text-slate-400 mr-1">Top Tags:</span>
-            {topTags.map(tag => {
-              const isSelected = selectedTag === tag;
-              return (
+            <div className="flex items-center gap-3">
+              {hasActiveFilters && (
                 <button
-                  key={tag}
-                  onClick={() => handleToggleTag(tag)}
-                  className={`text-[11px] font-medium px-2.5 py-0.5 rounded-md transition-all ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    resetFilters();
+                  }}
+                  className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded-xl transition-all"
                 >
-                  #{tag}
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset Filters
                 </button>
-              );
-            })}
+              )}
+              <button
+                type="button"
+                className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
+              >
+                <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isFiltersOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+        {/* Collapsible Content */}
+        {isFiltersOpen && (
+          <div className="space-y-4 pt-3 border-t border-slate-800/80">
+            {/* Filter Dropdowns */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">Genre</label>
+                <select
+                  value={selectedGenre}
+                  onChange={(e) => updateUrlFilters(e.target.value, selectedTag)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">Language</label>
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">Status</label>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">Age Rating</label>
+                <select
+                  value={selectedAgeRating}
+                  onChange={(e) => setSelectedAgeRating(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  {AGE_RATINGS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Top 8 Popular Tags List */}
+            {topTags.length > 0 && (
+              <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-medium text-slate-400 mr-1">Top Tags:</span>
+                {topTags.map(tag => {
+                  const isSelected = selectedTag === tag;
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => handleToggleTag(tag)}
+                      className={`text-[11px] font-medium px-2.5 py-0.5 rounded-md transition-all ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-950 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      #{tag}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
+      )}
 
       {/* Book Cards Grid */}
       {filteredBooks.length === 0 ? (
