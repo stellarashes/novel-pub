@@ -68,11 +68,39 @@ This SQL script creates:
 - `reading_progress` (User scroll percentage & position)
 - **Row Level Security (RLS)** policies for secure multi-user data access.
 
-### Step 5: Configure Storage Buckets (Optional for ePub / Covers)
-1. Go to **Storage** in the Supabase sidebar.
-2. Click **New Bucket** and create two public buckets:
-   - `book-covers` (Public bucket for cover images)
-   - `epubs` (Public bucket for ePub backup files)
+### Step 5: Storage Architecture Note
+- **Cover Images**: Stored directly as Base64 Data URLs (or external image URLs) inside the `books.cover_url` column in PostgreSQL.
+- **ePub & TXT Files**: Parsed directly in the browser via `JSZip` & `DOMParser`. The extracted chapter titles and HTML text payloads are stored directly in the `chapters.content` PostgreSQL table.
+- **No Supabase Storage Buckets Required**: No object storage buckets need to be created in Supabase for the application to function fully!
+
+---
+
+## ▲ Deploying to Vercel
+
+Since NovelPub is a 100% client-side Vite React application with direct Supabase SDK integration, it can be deployed to **Vercel** in seconds:
+
+### Step 1: Set Up Supabase Database (Prerequisite)
+If you haven't already set up Supabase:
+1. Create a Supabase project and run the SQL migration `supabase/migrations/0001_initial_schema.sql` in the Supabase SQL Editor (see [Setting Up Live Supabase PostgreSQL](#-setting-up-live-supabase-postgresql--auth) above).
+2. Copy your **Project URL** (`VITE_SUPABASE_URL`) and **anon / public key** (`VITE_SUPABASE_ANON_KEY`) from **Project Settings** -> **API**.
+
+### Step 2: Push Code to Git
+Push your repository to GitHub, GitLab, or Bitbucket.
+
+### Step 3: Import into Vercel
+1. Log in to [Vercel.com](https://vercel.com) and click **Add New** -> **Project**.
+2. Select your `novel-pub` repository.
+3. Vercel automatically detects the **Vite** framework preset:
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+
+### Step 4: Configure Environment Variables
+Before clicking Deploy, expand **Environment Variables** in Vercel and add:
+- `VITE_SUPABASE_URL` = `https://your-project-id.supabase.co`
+- `VITE_SUPABASE_ANON_KEY` = `your-anon-key-here`
+
+### Step 5: Deploy!
+Click **Deploy**. Vercel will compile the Vite production bundle and host NovelPub globally on high-speed edge CDN with free automatic SSL.
 
 ---
 
